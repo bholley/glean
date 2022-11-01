@@ -4,6 +4,8 @@
 
 * Kotlin
   * Increase to Android target/compile SDK version 33 ([#2246](https://github.com/mozilla/glean/pull/2246))
+* iOS
+  * Glean for iOS is now being built with Xcode 14.0 ([#](https://github.com/mozilla/glean/pull/TODO))
 
 # v51.7.0 (2022-10-25)
 
