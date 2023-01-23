@@ -150,11 +150,7 @@ commands:
       - run:
           name: Build Windows wheel
           command: |
-            cd glean-core/python
-            .venv3.8/bin/python3 setup.py bdist_wheel
-          environment:
-            GLEAN_BUILD_TARGET: x86_64-pc-windows-gnu
-            GLEAN_BUILD_VARIANT: release
+            make build-python-wheel CARGO_BUILD_TARGET=x86_64-pc-windows-gnu
 
   build-windows-i686-wheel:
     steps:
@@ -169,11 +165,7 @@ commands:
       - run:
           name: Build Windows wheel
           command: |
-            cd glean-core/python
-             .venv3.8/bin/python3 setup.py bdist_wheel
-          environment:
-            GLEAN_BUILD_TARGET: i686-pc-windows-gnu
-            GLEAN_BUILD_VARIANT: release
+            make build-python-wheel CARGO_BUILD_TARGET=i686-pc-windows-gnu
 
   install-python-windows-deps:
     steps:
@@ -191,7 +183,7 @@ commands:
             # requirements_dev.txt
             find ~/.cache/pip -name "*.whl" -exec $WINPYTHON -m pip install {} \;
             $WINPYTHON -m pip install -r glean-core/python/requirements_dev.txt --no-warn-script-location
-            $WINPYTHON -m pip install glean-core/python/dist/*.whl --no-warn-script-location
+            $WINPYTHON -m pip install dist/*.whl --no-warn-script-location
 
   install-mingw:
     steps:
@@ -718,7 +710,7 @@ jobs:
       - checkout
       - test-python
       - persist_to_workspace:
-          root: glean-core/python/
+          root: .
           paths: .venv3.8
 
   Python 3_9 tests:
@@ -816,10 +808,11 @@ jobs:
     steps:
       - checkout
       - attach_workspace:
-          at: glean-core/python/
+          at: .
       - run:
           name: Generate Python docs
-          command: glean-core/python/.venv3.8/bin/python3 -m pdoc --html glean --force -o build/docs/python
+          command: |
+            make docs-python
       - persist_to_workspace:
           root: build/
           paths: docs/python
@@ -836,11 +829,19 @@ jobs:
           command: |
             echo 'export PATH=/opt/python/cp38-cp38/bin:$PATH' >> $BASH_ENV
       - run:
-          name: Build Python extension
+          name: Setup Python env
           command: |
             make setup-python
-            glean-core/python/.venv3.8/bin/python3 setup.py sdist
-            glean-core/python/.venv3.8/bin/python3 -m twine upload dist/*
+      - run:
+          name: Build Python source distribution
+          command: |
+            make build-python-sdist
+      - run:
+          name: Upload Linux source distribution
+          command: |
+            # Requires that the TWINE_USERNAME and TWINE_PASSWORD environment
+            # variables are configured in CircleCI's environment variables.
+            .venv3.8/bin/python3 -m twine upload dist/*
 
   pypi-linux-release:
     docker:
@@ -859,28 +860,25 @@ jobs:
           command: |
             echo 'export PATH=/opt/python/cp38-cp38/bin:$PATH' >> $BASH_ENV
       - run:
-          name: Build Python extension
+          name: Setup Python env
           command: |
-            make build-python
-          environment:
-            GLEAN_BUILD_VARIANT: release
+            make setup-python
       - run:
-          name: Build Linux wheel
+          name: Build Python package
           command: |
-            cd glean-core/python
-            .venv3.8/bin/python3 setup.py bdist_wheel
-            .venv3.8/bin/python3 -m auditwheel repair dist/*.whl
+            make build-python-wheel
+      - run:
+          name: Upload Linux wheel
+          command: |
             # Requires that the TWINE_USERNAME and TWINE_PASSWORD environment
             # variables are configured in CircleCI's environment variables.
-            .venv3.8/bin/python3 -m twine upload wheelhouse/*
-          environment:
-            GLEAN_BUILD_VARIANT: release
+            .venv3.8/bin/python3 -m twine upload dist/*
       - install-ghr-linux
       - run:
           name: Publish to Github
           command: |
             # Upload to GitHub
-            ./ghr -replace ${CIRCLE_TAG} glean-core/python/wheelhouse
+            ./ghr -replace ${CIRCLE_TAG} dist
 
   pypi-macos-release:
     macos:
@@ -897,32 +895,18 @@ jobs:
       - run:
           name: Build macOS x86_64 wheel
           command: |
-            cd glean-core/python
-            .venv3.9/bin/python3 setup.py bdist_wheel
-          environment:
-            GLEAN_BUILD_TARGET: x86_64-apple-darwin
-            GLEAN_BUILD_VARIANT: release
+            make build-python-wheel CARGO_BUILD_TARGET=x86_64-apple-darwin
       - run:
           name: Build macOS aarch64 wheel
           command: |
-            cd glean-core/python
-            .venv3.9/bin/python3 setup.py bdist_wheel
-          environment:
-            SDKROOT: /Library/Developer/CommandLineTools/SDKs/MacOSX11.sdk
-            GLEAN_BUILD_TARGET: aarch64-apple-darwin
-            GLEAN_BUILD_VARIANT: release
+            make build-python-wheel CARGO_BUILD_TARGET=aarch64-apple-darwin
       - run:
           name: Build macOS universal2 wheel
           command: |
-            cd glean-core/python
-            .venv3.9/bin/python3 setup.py bdist_wheel
-          environment:
-            GLEAN_BUILD_TARGET: universal
-            GLEAN_BUILD_VARIANT: release
+            make build-python-wheel MATURIN_FLAG=--universal2
       - run:
           name: Upload wheels to PyPI
           command: |
-            cd glean-core/python
             # Requires that the TWINE_USERNAME and TWINE_PASSWORD environment
             # variables are configured in CircleCI's environment variables.
             .venv3.9/bin/python3 -m twine upload dist/*
@@ -931,7 +915,7 @@ jobs:
           name: Publish to Github
           command: |
             # Upload to GitHub
-            ./ghr -replace ${CIRCLE_TAG} glean-core/python/dist
+            ./ghr -replace ${CIRCLE_TAG} dist
 
   pypi-windows-x86_64-release:
     docker:
@@ -942,7 +926,6 @@ jobs:
       - run:
           name: Upload to PyPI
           command: |
-            cd glean-core/python
             # Requires that the TWINE_USERNAME and TWINE_PASSWORD environment
             # variables are configured in CircleCI's environment variables.
             .venv3.8/bin/python3 -m twine upload dist/*
@@ -951,7 +934,7 @@ jobs:
           name: Publish to Github
           command: |
             # Upload to GitHub
-            ./ghr -replace ${CIRCLE_TAG} glean-core/python/dist
+            ./ghr -replace ${CIRCLE_TAG} dist
 
   pypi-windows-i686-release:
     docker:
@@ -962,7 +945,6 @@ jobs:
       - run:
           name: Upload to PyPI
           command: |
-            cd glean-core/python
             # Requires that the TWINE_USERNAME and TWINE_PASSWORD environment
             # variables are configured in CircleCI's environment variables.
             .venv3.8/bin/python3 -m twine upload dist/*
@@ -971,7 +953,7 @@ jobs:
           name: Publish to Github
           command: |
             # Upload to GitHub
-            ./ghr -replace ${CIRCLE_TAG} glean-core/python/dist
+            ./ghr -replace ${CIRCLE_TAG} dist
 
   ###########################################################################
   # Docs

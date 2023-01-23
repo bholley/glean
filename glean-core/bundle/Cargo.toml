@@ -11,6 +11,9 @@ license = "MPL-2.0"
 # This crate is never published to crates.io
 publish = false
 
+[package.metadata.maturin]
+name = "glean._uniffi"
+
 # We use the same name as glean-ffi.
 # The Kotlin/Swift/Python bindings will use this name.
 [lib]
